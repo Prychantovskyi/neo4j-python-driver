@@ -141,7 +141,7 @@ class AsyncIOPool(abc.ABC):
                     try:
                         connection = await self.opener(address, timeout)
                     except ServiceUnavailable:
-                        await self.remove(address)
+                        await self.deactivate(address)
                         raise
                     else:
                         connection.pool = self
@@ -235,16 +235,6 @@ class AsyncIOPool(abc.ABC):
             "No write service available for pool {}".format(self)
         )
 
-    async def remove(self, address):
-        """ Remove an address from the connection pool, if present, closing
-        all connections to that address.
-        """
-        async with self.lock:
-            for connection in self.connections.pop(address, ()):
-                try:
-                    await connection.close()
-                except OSError:
-                    pass
 
     async def close(self):
         """ Close all connections and empty the pool.
@@ -253,7 +243,8 @@ class AsyncIOPool(abc.ABC):
         try:
             async with self.lock:
                 for address in list(self.connections):
-                    await self.remove(address)
+                    for connection in self.connections.pop(address, ()):
+                        await connection.close()
         except TypeError:
             pass
 

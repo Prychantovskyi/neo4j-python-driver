@@ -141,7 +141,7 @@ class IOPool(abc.ABC):
                     try:
                         connection = self.opener(address, timeout)
                     except ServiceUnavailable:
-                        self.remove(address)
+                        self.deactivate(address)
                         raise
                     else:
                         connection.pool = self
@@ -235,16 +235,6 @@ class IOPool(abc.ABC):
             "No write service available for pool {}".format(self)
         )
 
-    def remove(self, address):
-        """ Remove an address from the connection pool, if present, closing
-        all connections to that address.
-        """
-        with self.lock:
-            for connection in self.connections.pop(address, ()):
-                try:
-                    connection.close()
-                except OSError:
-                    pass
 
     def close(self):
         """ Close all connections and empty the pool.
@@ -253,7 +243,8 @@ class IOPool(abc.ABC):
         try:
             with self.lock:
                 for address in list(self.connections):
-                    self.remove(address)
+                    for connection in self.connections.pop(address, ()):
+                        connection.close()
         except TypeError:
             pass
 
