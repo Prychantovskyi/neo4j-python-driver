@@ -220,15 +220,18 @@ class AsyncIOPool(abc.ABC):
                 connections = self.connections[address]
             except KeyError:  # already removed from the connection pool
                 return
-            for conn in list(connections):
-                if not conn.in_use:
-                    connections.remove(conn)
-                    try:
-                        await conn.close()
-                    except OSError:
-                        pass
-            if not connections:
-                await self.remove(address)
+            closable_connections = [
+                conn for conn in connections if not conn.in_use
+            ]
+            # First remove all connections in question, then try to close them.
+            # If closing of a connection fails, we will end up in this method
+            # again.
+            for conn in closable_connections:
+                connections.remove(conn)
+            for conn in closable_connections:
+                await conn.close()
+            if not self.connections[address]:
+                del self.connections[address]
 
     def on_write_failure(self, address):
         raise WriteServiceUnavailable(
